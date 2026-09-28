@@ -1,0 +1,189 @@
+rules_version = '2';
+
+// Security model
+// --------------
+// Identity and tenancy come from Firebase Auth custom claims, which only the
+// Admin SDK (server) can set:
+//   admin:  { role: 'admin' }
+//   client: { role: 'client', clientId: '<clients doc id>' }
+// Anything not explicitly allowed below is denied.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Auth helpers ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.role == 'admin';
+    }
+
+    function isClientOf(clientId) {
+      return signedIn()
+        && request.auth.token.role == 'client'
+        && request.auth.token.clientId is string
+        && request.auth.token.clientId == clientId;
+    }
+
+    // Kill switch: deactivating a client company blocks its content immediately,
+    // without waiting for ID tokens to expire.
+    function clientIsActive(clientId) {
+      return get(/databases/$(database)/documents/clients/$(clientId)).data.status == 'active';
+    }
+
+    // ---------- Validation helpers ----------
+
+    function isStr(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    function isNonEmptyStr(v, max) {
+      return v is string && v.size() > 0 && v.size() <= max;
+    }
+
+    // '' (not set) or an https URL. Blocks javascript:/data: URLs being rendered as links.
+    function isUrlOrEmpty(v) {
+      return v is string && (v == '' || (v.size() <= 2048 && v.matches('^https://[^\\s]+$')));
+    }
+
+    function isEmailOrEmpty(v) {
+      return v is string && (v == '' || (v.size() <= 254 && v.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')));
+    }
+
+    function stampedNow(data) {
+      return data.updatedAt == request.time && data.updatedBy == request.auth.uid;
+    }
+
+    function unchanged(field) {
+      return request.resource.data[field] == resource.data[field];
+    }
+
+    // ---------- users ----------
+    // Profile mirror of Auth users. Written only by the server (Admin SDK bypasses
+    // rules), so role/clientId can never be edited from a browser.
+    match /users/{uid} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------- clients ----------
+    function validRetainer(r) {
+      return r is map
+        && r.keys().hasOnly(['status', 'planName'])
+        && r.keys().hasAll(['status', 'planName'])
+        && r.status in ['active', 'paused', 'ended', 'none']
+        && isStr(r.planName, 120);
+    }
+
+    function validClient(d) {
+      return d.keys().hasOnly([
+          'name', 'status', 'contactName', 'contactEmail', 'phone', 'website',
+          'industry', 'logoUrl', 'driveFolderUrl', 'retainer',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && d.keys().hasAll([
+          'name', 'status', 'contactName', 'contactEmail', 'phone', 'website',
+          'industry', 'logoUrl', 'driveFolderUrl', 'retainer',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && isNonEmptyStr(d.name, 120)
+        && d.status in ['active', 'inactive']
+        && isStr(d.contactName, 120)
+        && isEmailOrEmpty(d.contactEmail)
+        && isStr(d.phone, 40)
+        && isUrlOrEmpty(d.website)
+        && isStr(d.industry, 80)
+        && isUrlOrEmpty(d.logoUrl)
+        && isUrlOrEmpty(d.driveFolderUrl)
+        && validRetainer(d.retainer)
+        && d.createdAt is timestamp
+        && d.createdBy is string;
+    }
+
+    match /clients/{clientId} {
+      // A client user may read only their own company document.
+      allow get: if isAdmin() || isClientOf(clientId);
+      allow list: if isAdmin();
+
+      allow create: if isAdmin()
+        && validClient(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && stampedNow(request.resource.data);
+
+      allow update: if isAdmin()
+        && validClient(request.resource.data)
+        && unchanged('createdAt')
+        && unchanged('createdBy')
+        && stampedNow(request.resource.data);
+
+      // Deactivate (status: 'inactive') instead of deleting, to keep history intact.
+      allow delete: if false;
+
+      // Admin-only data about a client (internal notes, billing contact, ...).
+      // Firestore secures whole documents, so admin-only fields live here.
+      match /private/{docId} {
+        allow read: if isAdmin();
+        allow write: if isAdmin()
+          && docId == 'profile'
+          && request.resource.data.keys().hasOnly(['internalNotes', 'billingEmail', 'updatedAt', 'updatedBy'])
+          && isStr(request.resource.data.internalNotes, 10000)
+          && isEmailOrEmpty(request.resource.data.billingEmail)
+          && stampedNow(request.resource.data);
+      }
+    }
+
+    // ---------- deliverables ----------
+    function validDeliverable(d) {
+      return d.keys().hasOnly([
+          'clientId', 'title', 'description', 'category', 'status', 'previewUrl',
+          'googleDriveUrl', 'deliveryDate', 'notes', 'archived',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && d.keys().hasAll([
+          'clientId', 'title', 'description', 'category', 'status', 'previewUrl',
+          'googleDriveUrl', 'deliveryDate', 'notes', 'archived',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && isNonEmptyStr(d.clientId, 128)
+        && isNonEmptyStr(d.title, 200)
+        && isStr(d.description, 5000)
+        && d.category in ['design', 'video', 'photo', 'document', 'social_media', 'website', 'other']
+        && d.status in ['draft', 'in_review', 'approved', 'completed']
+        && isUrlOrEmpty(d.previewUrl)
+        && isUrlOrEmpty(d.googleDriveUrl)
+        && (d.deliveryDate == null || d.deliveryDate is timestamp)
+        && isStr(d.notes, 5000)
+        && d.archived is bool
+        && d.createdAt is timestamp
+        && d.createdBy is string;
+    }
+
+    match /deliverables/{deliverableId} {
+      // Clients: only their own, non-archived deliverables, while their company is active.
+      // Rules are not filters: a client query must itself be constrained with
+      // clientId == <own clientId> and archived == false, or it is rejected entirely.
+      allow read: if isAdmin()
+        || (isClientOf(resource.data.clientId)
+            && resource.data.archived == false
+            && clientIsActive(resource.data.clientId));
+
+      allow create: if isAdmin()
+        && validDeliverable(request.resource.data)
+        && exists(/databases/$(database)/documents/clients/$(request.resource.data.clientId))
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && stampedNow(request.resource.data);
+
+      // clientId is immutable so a deliverable can never be moved into another
+      // client's portal by mistake.
+      allow update: if isAdmin()
+        && validDeliverable(request.resource.data)
+        && unchanged('clientId')
+        && unchanged('createdAt')
+        && unchanged('createdBy')
+        && stampedNow(request.resource.data);
+
+      allow delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Rebrand the portal by changing these values only.
+ */
+@theme {
+  --color-canvas: #f6f5f2;
+  --color-surface: #ffffff;
+  --color-subtle: #efeee9;
+  --color-line: #e6e4de;
+  --color-ink: #17161b;
+  --color-muted: #6c6a73;
+  --color-faint: #9c9aa3;
+  --color-brand: #17161b;
+  --color-brand-contrast: #ffffff;
+  --color-accent: #5b4ce6;
+  --color-accent-soft: #eeebff;
+  --color-danger: #c2362b;
+  --color-danger-soft: #fdecea;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --shadow-card: 0 1px 2px rgb(23 22 27 / 0.04), 0 4px 16px -8px rgb(23 22 27 / 0.08);
+  --shadow-lift: 0 2px 4px rgb(23 22 27 / 0.05), 0 16px 40px -16px rgb(23 22 27 / 0.22);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Native <dialog> backdrop used by <Sheet>. */
+dialog::backdrop {
+  background: rgb(23 22 27 / 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Bottom padding that clears the mobile tab bar + iOS home indicator. */
+.pb-tabbar {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  .pb-tabbar {
+    padding-bottom: 3rem;
+  }
+}
