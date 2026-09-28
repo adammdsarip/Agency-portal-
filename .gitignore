@@ -46,3 +46,6 @@ next-env.d.ts
 .firebase/
 *-debug.log
 firebase-export-*
+
+# e2e
+/tests/e2e/screenshots/

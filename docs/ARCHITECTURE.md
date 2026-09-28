@@ -76,6 +76,14 @@ clients/{clientId}                # client-visible company profile
 clients/{clientId}/private/profile   # ADMIN-ONLY data about a client
   internalNotes, billingEmail, updatedAt, updatedBy
 
+requests/{requestId}              # client-submitted, tenant-scoped by clientId
+  clientId, title, description, category (same slugs as deliverables),
+  priority: normal|urgent, fileUrl, neededBy (Timestamp|null),
+  status: submitted|in_progress|waiting_on_client|completed|cancelled,
+  adminResponse (agency reply, visible to client),
+  createdByName, createdByEmail (must match the verified token),
+  createdAt, updatedAt, createdBy, updatedBy
+
 deliverables/{deliverableId}      # top-level, tenant-scoped by clientId
   clientId, title, description,
   category: design|video|photo|document|social_media|website|other,
@@ -100,7 +108,7 @@ Decisions:
 - **Dates:** `deliveryDate` is a date-only value stored as a Timestamp at 00:00 UTC and always
   formatted in UTC, so it never shifts a day across time zones.
 - **Future collections** follow the same tenant pattern (`clientId` field + rules):
-  `requests`, `contentItems` (calendar / IG / TikTok posts), `threads/{id}/messages` (chat),
+  `contentItems` (calendar / IG / TikTok posts), `threads/{id}/messages` (chat),
   `invoices`, `payments`, `assets`, `clients/{id}/private/*` for web/domain credentials,
   `users/{uid}/notifications`, `users/{uid}/pushTokens`.
 
@@ -132,7 +140,13 @@ Decisions:
   active. Queries that don't constrain `clientId` to the caller's own are rejected outright
   (rules are not filters). Only admins create/update/delete; `clientId`, `createdAt`,
   `createdBy` are immutable; `updatedAt` must equal server time; the client must exist.
-- All of this is covered by automated tests in `tests/rules/` run against the emulator.
+- `requests/{id}`: the first collection clients can **write**. A client may create a request
+  only for their own `clientId`, while their company is active, in status `submitted`, with an
+  empty agency reply, and with `createdBy`/`createdByName`/`createdByEmail` matching their
+  verified token (no impersonation). The only change a client can make afterwards is
+  `submitted → cancelled`. Admins manage status and reply; origin fields are immutable.
+- All of this is covered by automated tests in `tests/rules/` run against the emulator
+  (39 tests), plus a browser end-to-end suite in `tests/e2e/` (30 checks).
 
 ## 6. User ↔ client relationship
 
@@ -152,7 +166,8 @@ Client portal (`/portal`, bottom nav on mobile, sidebar on desktop):
 |---|---|
 | `/portal` Home — welcome, company, retainer status, latest deliverables, placeholders for invoice/content/requests | built |
 | `/portal/deliverables` — search, category + status filters, cards, detail sheet, Open in Drive | built |
-| `/portal/calendar`, `/portal/requests` | placeholder |
+| `/portal/requests` — submit (title, details, type, needed-by, file link, priority), track status, read agency reply, withdraw | built |
+| `/portal/calendar` | placeholder |
 | `/portal/more` — account, sign out, upcoming modules | built |
 
 Admin (`/admin`):
@@ -160,12 +175,14 @@ Admin (`/admin`):
 |---|---|
 | `/admin` Clients list + search | built |
 | `/admin/clients/new` Add client | built |
-| `/admin/clients/[clientId]` Profile: edit info, internal notes, portal users, deliverables | built |
+| `/admin/clients/[clientId]` Profile: deliverables, requests, edit info, internal notes, portal users | built |
+| `/admin/requests` Cross-client requests inbox (open/completed/cancelled/all, search, status + reply) | built |
 | `/admin/deliverables` Deliverables manager with client selector | built |
 
 Key components: `AuthProvider`, `RoleGuard`, `PortalShell`, `AdminShell`, `DeliverableCard`,
 `DeliverableDetailSheet`, `DeliverableFilters`, `DeliverableForm`, `DeliverablesManager`,
-`ClientForm`, `ClientUsersPanel`, UI primitives in `components/ui`.
+`ClientForm`, `ClientUsersPanel`, `NewRequestSheet`, `ClientRequestSheet`, `AdminRequestSheet`,
+`RequestsInbox`, UI primitives in `components/ui`.
 
 ## 8. Environment variables
 
@@ -188,14 +205,16 @@ npm run deploy:firestore             # deploy rules + indexes
 npm run set-admin -- you@agency.com  # promote your account to admin
 npm run dev
 npm run test:rules                   # security tests (needs Java for the emulator)
+npm run test:e2e                     # browser end-to-end tests on the emulators
 ```
 
 ## 10. Implementation plan
 
 1. **Foundation (this PR):** Firebase setup, auth with role claims, rules + tests, clients
    database, deliverables (client + admin), PWA manifest.
-2. **Requests:** `requests` collection (clients may *create* for their own `clientId` only),
-   status workflow, admin inbox.
+2. **Requests (done):** `requests` collection (clients may *create* for their own `clientId`
+   only), status workflow, agency reply, withdraw, admin inbox. Next: email/push alert to the
+   agency on new requests (Notifications module), linking a request to its deliverable.
 3. **Content calendar:** `contentItems` with platform (Instagram/TikTok), schedule date,
    approval by client.
 4. **Chat:** `threads/{clientId}/messages`, real-time.

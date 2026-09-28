@@ -12,6 +12,10 @@ import { DeliverableRow } from "@/features/deliverables/components/DeliverableCa
 import { DeliverableDetailSheet } from "@/features/deliverables/components/DeliverableDetailSheet";
 import { useClientDeliverables } from "@/features/deliverables/hooks";
 import type { Deliverable } from "@/features/deliverables/types";
+import { isOpen } from "@/features/requests/constants";
+import { ClientRequestSheet } from "@/features/requests/components/ClientRequestSheet";
+import { RequestRow } from "@/features/requests/components/presentation";
+import { useClientRequests } from "@/features/requests/hooks";
 
 function greeting(date = new Date()) {
   const h = date.getHours();
@@ -25,6 +29,9 @@ export default function PortalHomePage() {
   const { client, clientId } = useCurrentClient();
   const latest = useClientDeliverables(clientId, 4);
   const [open, setOpen] = useState<Deliverable | null>(null);
+  const requests = useClientRequests(clientId);
+  const openRequests = requests.data.filter((r) => isOpen(r.status));
+  const [openRequestId, setOpenRequestId] = useState<string | null>(null);
 
   const firstName = user?.displayName?.split(" ")[0];
   const retainerTone = { active: "green", paused: "amber", ended: "neutral", none: "neutral" } as const;
@@ -83,7 +90,7 @@ export default function PortalHomePage() {
           </div>
         </Card>
 
-        {/* Modules not built yet: honest empty states, no fake data. */}
+        {/* Calendar and invoices aren't built yet: honest empty states, no fake data. */}
         <Card>
           <CardHeader title="Upcoming content" icon={CalendarDays} />
           <EmptyState compact title="Your content calendar is coming soon" description="Scheduled posts and campaigns will show here." />
@@ -94,7 +101,7 @@ export default function PortalHomePage() {
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader
-            title="Open requests"
+            title={openRequests.length ? `Open requests · ${openRequests.length}` : "Open requests"}
             icon={MessageSquarePlus}
             action={
               <Link href="/portal/requests" className="flex items-center gap-1 text-sm font-medium text-muted hover:text-ink">
@@ -102,11 +109,42 @@ export default function PortalHomePage() {
               </Link>
             }
           />
-          <EmptyState compact title="No open requests" description="Soon you'll be able to send us requests right from here." />
+          {requests.loading ? (
+            <div className="grid place-items-center py-8">
+              <Spinner />
+            </div>
+          ) : requests.error ? (
+            <p className="px-5 pb-5 text-sm text-danger">{friendlyError(requests.error)}</p>
+          ) : openRequests.length === 0 ? (
+            <EmptyState
+              compact
+              title="No open requests"
+              description={
+                <>
+                  Need something?{" "}
+                  <Link href="/portal/requests" className="font-medium text-ink underline underline-offset-2">
+                    Send us a request
+                  </Link>
+                </>
+              }
+            />
+          ) : (
+            <ul className="divide-y divide-line border-t border-line">
+              {openRequests.slice(0, 3).map((r) => (
+                <li key={r.id}>
+                  <RequestRow request={r} audience="client" onOpen={() => setOpenRequestId(r.id)} />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 
       <DeliverableDetailSheet deliverable={open} onClose={() => setOpen(null)} />
+      <ClientRequestSheet
+        request={requests.data.find((r) => r.id === openRequestId) ?? null}
+        onClose={() => setOpenRequestId(null)}
+      />
     </div>
   );
 }

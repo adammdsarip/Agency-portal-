@@ -1,13 +1,14 @@
 "use client";
 
-import { Building2, Layers, LogOut, UserCircle } from "lucide-react";
+import { Building2, Inbox, Layers, LogOut, UserCircle } from "lucide-react";
 import { AppShell, type NavItem } from "@/components/layout/AppShell";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { RoleGuard } from "@/features/auth/RoleGuard";
 
-// Future modules (Requests, Calendar, Invoices, Chat) plug in here.
+// Future modules (Calendar, Invoices, Chat) plug in here.
 const NAV: NavItem[] = [
   { href: "/admin/clients", label: "Clients", icon: Building2 },
+  { href: "/admin/requests", label: "Requests", icon: Inbox },
   { href: "/admin/deliverables", label: "Deliverables", icon: Layers },
   { href: "/admin/account", label: "Account", icon: UserCircle },
 ];

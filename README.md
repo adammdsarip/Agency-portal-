@@ -13,10 +13,12 @@ Firestore**, deployable to Vercel or Netlify, installable as a PWA.
 - **Security** — `firestore.rules` enforce tenant isolation server-side; covered by
   automated tests (`npm run test:rules`).
 - **Client portal** — Home (welcome, company, retainer, latest deliverables), Deliverables
-  (search, category & status filters, detail sheet, Open in Google Drive), More. Calendar and
-  Requests are placeholders.
+  (search, category & status filters, detail sheet, Open in Google Drive), Requests (submit
+  with details, type, deadline, file link and priority; track status; read the agency's reply;
+  withdraw), More. Calendar is a placeholder.
 - **Admin** — clients list, add/edit client (with admin-only internal notes), portal-user
-  invites & disabling, deliverables manager (add, edit, status, archive, delete).
+  invites & disabling, deliverables manager (add, edit, status, archive, delete), requests
+  inbox across all clients (status workflow + reply to the client).
 - **PWA** — web manifest + icons (service worker comes with push notifications).
 
 ## Setup
@@ -66,6 +68,7 @@ of `demo-agency-portal`, any non-empty API key/app id, and add
 | `npm run dev` / `build` / `start` | Next.js |
 | `npm run lint` / `typecheck` | ESLint / TypeScript |
 | `npm run test:rules` | Security-rules tests on the Firestore emulator (requires Java 11+) |
+| `npm run test:e2e` | Browser end-to-end tests: starts emulators + dev server, drives Chromium through admin and client flows (run `npx playwright install chromium` once, or set `PLAYWRIGHT_CHROMIUM_PATH`) |
 | `npm run emulators` | Local Auth + Firestore emulators |
 | `npm run deploy:firestore` | Deploy `firestore.rules` + `firestore.indexes.json` |
 | `npm run set-admin -- <email>` | Grant the admin role |

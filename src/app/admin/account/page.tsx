@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, PageHeader } from "@/components/ui/Card";
 import { useAuth } from "@/features/auth/AuthProvider";
 
-const UPCOMING = ["Requests inbox", "Content calendars", "Invoices & payments", "Client chat", "Notifications"];
+const UPCOMING = ["Content calendars", "Invoices & payments", "Client chat", "Notifications"];
 
 export default function AdminAccountPage() {
   const { user, signOut } = useAuth();

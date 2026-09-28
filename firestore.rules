@@ -185,5 +185,75 @@ service cloud.firestore {
 
       allow delete: if isAdmin();
     }
+
+    // ---------- requests ----------
+    // The first collection clients can WRITE to, so creation is tightly scoped:
+    // a client can only file a request for their own company, as themselves,
+    // in the initial 'submitted' state, with no agency reply pre-filled.
+    function validRequest(d) {
+      return d.keys().hasOnly([
+          'clientId', 'title', 'description', 'category', 'priority', 'fileUrl',
+          'neededBy', 'status', 'adminResponse', 'createdByName', 'createdByEmail',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && d.keys().hasAll([
+          'clientId', 'title', 'description', 'category', 'priority', 'fileUrl',
+          'neededBy', 'status', 'adminResponse', 'createdByName', 'createdByEmail',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && isNonEmptyStr(d.clientId, 128)
+        && isNonEmptyStr(d.title, 200)
+        && isStr(d.description, 5000)
+        && d.category in ['design', 'video', 'photo', 'document', 'social_media', 'website', 'other']
+        && d.priority in ['normal', 'urgent']
+        && isUrlOrEmpty(d.fileUrl)
+        && (d.neededBy == null || d.neededBy is timestamp)
+        && d.status in ['submitted', 'in_progress', 'waiting_on_client', 'completed', 'cancelled']
+        && isStr(d.adminResponse, 5000)
+        && isStr(d.createdByName, 200)
+        && isStr(d.createdByEmail, 254)
+        && d.createdAt is timestamp
+        && d.createdBy is string;
+    }
+
+    match /requests/{requestId} {
+      allow read: if isAdmin()
+        || (isClientOf(resource.data.clientId) && clientIsActive(resource.data.clientId));
+
+      allow create: if validRequest(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && stampedNow(request.resource.data)
+        && (
+          // Client: own company only, identity taken from the verified token.
+          (isClientOf(request.resource.data.clientId)
+            && clientIsActive(request.resource.data.clientId)
+            && request.resource.data.status == 'submitted'
+            && request.resource.data.adminResponse == ''
+            && request.resource.data.createdByName == request.auth.token.get('name', '')
+            && request.resource.data.createdByEmail == request.auth.token.get('email', ''))
+          // Admin: may log a request on a client's behalf.
+          || (isAdmin()
+            && exists(/databases/$(database)/documents/clients/$(request.resource.data.clientId)))
+        );
+
+      // Client: may only cancel their company's request while it's still 'submitted'.
+      allow update: if isClientOf(resource.data.clientId)
+        && clientIsActive(resource.data.clientId)
+        && resource.data.status == 'submitted'
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedBy'])
+        && stampedNow(request.resource.data);
+
+      // Admin: manage status and reply; origin fields are immutable.
+      allow update: if isAdmin()
+        && validRequest(request.resource.data)
+        && unchanged('clientId')
+        && unchanged('createdAt')
+        && unchanged('createdBy')
+        && unchanged('createdByName')
+        && unchanged('createdByEmail')
+        && stampedNow(request.resource.data);
+
+      allow delete: if isAdmin();
+    }
   }
 }

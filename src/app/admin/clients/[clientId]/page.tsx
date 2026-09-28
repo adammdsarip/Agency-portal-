@@ -12,10 +12,12 @@ import { ClientUsersPanel } from "@/features/clients/components/ClientUsersPanel
 import { useClient, useClientPrivate } from "@/features/clients/hooks";
 import type { Client, ClientInput } from "@/features/clients/types";
 import { DeliverablesManager } from "@/features/deliverables/components/DeliverablesManager";
+import { RequestsInbox } from "@/features/requests/components/RequestsInbox";
 import { cn } from "@/lib/utils/cn";
 
 const TABS = [
   { id: "deliverables", label: "Deliverables" },
+  { id: "requests", label: "Requests" },
   { id: "profile", label: "Profile" },
   { id: "users", label: "Portal users" },
 ] as const;
@@ -86,6 +88,7 @@ function ClientProfile() {
       </div>
 
       {tab === "deliverables" && <DeliverablesManager clientId={clientId} clientName={c.name} />}
+      {tab === "requests" && <RequestsInbox clientId={clientId} />}
       {tab === "users" && <ClientUsersPanel clientId={clientId} />}
       {tab === "profile" && (
         <div className="max-w-3xl">
